@@ -5,25 +5,29 @@ import nntplib
 from time import ctime
 import struct, time
 import ssl 
+import sys 
+
 
 
 socket.setdefaulttimeout(2)
 
 class Service:
-    def __init__(self, ip = '127.0.0.1', tcp=0, udp = 0, icmp = False, app=None):
+    def __init__(self, svc = 'unknown', ip = '127.0.0.1', tcp=0, udp = 0, icmp = False, app=None):
+        self.svc = svc
         self.ip = ip
         self.tcp = tcp
         self.udp = udp
         self.icmp = icmp
         self.app = app
         self.status = False 
+
         self.test_comment = 'No comment returned from test.'
         self.test()
         self.report_results()
     
-    def report_results(self):
+    def report_results(self, filter='down'):
         status = 'up' if self.status else 'down'
-        print(self.ip, self.tcp, self.udp, self.icmp, self.app, status, self.test_comment)
+        print (f'{self.svc}, {self.ip}, {self.tcp}, {self.udp}, {self.icmp}, {self.app}, {status}, {self.test_comment}')
 
     def tcp(self):
         pass
@@ -37,11 +41,15 @@ class Service:
             self.test_icmp()
 
     def test_tcp(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            result = s.connect_ex((self.ip,self.tcp))
-            if result ==0:
-                self.status = True
-            s.close()
+        self.status = False 
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
+                result = client.connect((self.ip,self.tcp))
+                if result ==0:
+                    self.status = True
+        except:
+            self.test_comment = f'Exception received: {sys.exc_info()[1]}'
+             
     
     def test_icmp(self):
         print('pinging', self.ip)
@@ -60,17 +68,18 @@ class Service:
             self.status = self.ntp_app()
 
     def http_app(self):
-        url = f'{self.app}://{self.ip}'    
+        url = f'{self.app}://{self.ip}'
         ssl._create_default_https_context = ssl._create_unverified_context
         try: 
             with urllib.request.urlopen(url) as response:
                 if response.code == 200:
+                    self.test_comment = 'Web server reported status code 200'
                     return True 
                 else:
-                    self.test_comment = 'Did not receive response code = 200'
-                    return False 
+                    self.test_comment = 'Web server status reported: ' + response.code 
+                    return False
         except: 
-            self.test_comment = 'Did not receive response code = 200'
+            self.test_comment = f'Exception received: {sys.exc_info()[1]}'
             return False 
 
 
@@ -91,14 +100,14 @@ class Service:
                 self.test_comment = 'Time returned from NTP server: ' + time.ctime(t).replace("  "," ")
                 return True 
         except:
-            self.test_comment = 'Server NTP query failed.'
+            self.test_comment = f'Exception received: {sys.exc_info()[1]}'
             return False 
 
 
-print('host, tcp port, udp port, icmp, application, up|down')
-web = Service(ip='www.google.com', tcp=99)
-web = Service(ip='www.google.com', tcp=80)
-web = Service(ip='www.google.com', tcp=443)
+print('svc, host, tcp port, udp port, icmp, application, up|down, test comment')
+web = Service(svc ='R-01 abc', ip='www.google.com', tcp=99)
+web = Service(svc ='R-01 abc', ip='www.google.com', tcp=80)
+web = Service(svc ='R-01 abc', ip='www.google.com', tcp=443)
 web = Service(ip='www.amazon.com', tcp=443)
 web = Service(ip='www.yournetguard.com', tcp=22)
 web = Service(ip='127.0.0.1', app='http')
